@@ -246,8 +246,8 @@ void criarAcesso(Produto produto) {
 
 //Função para mostrar um produto na tela
 void printarProduto(Produto produto) {
-    printf("ID: %d | Marca: %s | Categoria: %s | Preco: %.2f | Removido: %d\n", 
-    produto.id, produto.marca, produto.categoria, produto.preco, produto.removido);
+    printf("ID: %d | Marca: %s | Categoria: %s | Preco: %.2f\n", 
+    produto.id, produto.marca, produto.categoria, produto.preco);
 }
 
 // Função para listar os produtos do arquivo
@@ -304,7 +304,6 @@ int buscarProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoInd
     // Obter o número de registros no arquivo de índice
     fseek(arquivoIndice, 0, SEEK_END);
     numRegistros = ftell(arquivoIndice) / sizeof(Indice);
-    printf("Numero de registros: %ld\n", numRegistros);
     fim = numRegistros - 1;
 
     // Pesquisa binária no arquivo de índice
