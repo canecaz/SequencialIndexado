@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdbool.h>
 
 #define MAX_LINE_LENGTH 1024
 #define BLOCK_SIZE 100000
@@ -11,11 +12,11 @@
 #define HASH_SIZE_BUSCA 101
 
 typedef struct {
+    bool removido;
     int id;
+    float preco;
     char marca[30];
     char categoria[45];
-    float preco;
-    int removido;
 } Produto;
 
 typedef struct {
@@ -59,7 +60,7 @@ void criarIndiceProdutos() {
     FILE *arquivoProdutos = fopen("produtos.dat", "rb");
     FILE *arquivoIndiceProdutos = fopen("indice_produtos.dat", "wb");
 
-    if (arquivoProdutos == NULL || arquivoIndiceProdutos == NULL) {
+    if (!arquivoProdutos || !arquivoIndiceProdutos) {
         printf("Erro ao abrir os arquivos.\n");
         return;
     }
@@ -245,7 +246,8 @@ void criarAcesso(Produto produto) {
 
 //Função para mostrar um produto na tela
 void printarProduto(Produto produto) {
-    printf("ID: %d | Marca: %s | Categoria: %s | Preco: %.2f\n", produto.id, produto.marca, produto.categoria, produto.preco);
+    printf("ID: %d | Marca: %s | Categoria: %s | Preco: %.2f | Removido: %d\n", 
+    produto.id, produto.marca, produto.categoria, produto.preco, produto.removido);
 }
 
 // Função para listar os produtos do arquivo
@@ -254,14 +256,18 @@ void listarProdutos(FILE *arquivo, FILE *arquivoExtensao) {
 
     //Listar produtos do arquivo principal
     fseek(arquivo, 0, SEEK_SET);
-    while (fread(&produto, sizeof(Produto), 1, arquivo))
-        printarProduto(produto);
+    while (fread(&produto, sizeof(Produto), 1, arquivo)) {
+        if (!produto.removido)
+            printarProduto(produto);
+    }
 
     //Listar produtos do arquivo de extensão
     if (arquivoExtensao) {
         fseek(arquivoExtensao, 0, SEEK_SET);
-        while (fread(&produto, sizeof(Produto), 1, arquivoExtensao))
-            printarProduto(produto);
+        while (fread(&produto, sizeof(Produto), 1, arquivoExtensao)) {
+            if (!produto.removido)
+                printarProduto(produto);
+        }
     }
 }
 
@@ -298,6 +304,7 @@ int buscarProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoInd
     // Obter o número de registros no arquivo de índice
     fseek(arquivoIndice, 0, SEEK_END);
     numRegistros = ftell(arquivoIndice) / sizeof(Indice);
+    printf("Numero de registros: %ld\n", numRegistros);
     fim = numRegistros - 1;
 
     // Pesquisa binária no arquivo de índice
@@ -309,7 +316,7 @@ int buscarProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoInd
         fread(&indice, sizeof(Indice), 1, arquivoIndice);
 
         // Comparar o ID do índice com o ID buscado
-        if (indice.id == idBuscado) {
+        if (indice.id == idBuscado && !produto.removido) {
             // ID encontrado no índice, buscar no arquivo de produtos
             fseek(arquivoProdutos, indice.offset, SEEK_SET);
             fread(&produto, sizeof(Produto), 1, arquivoProdutos);
@@ -328,7 +335,7 @@ int buscarProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoInd
 
     if (arquivoExtensao) {
         while (fread(&produto, sizeof(Produto), 1, arquivoExtensao)) {
-            if (produto.id == idBuscado) {
+            if (produto.id == idBuscado && !produto.removido) {
                 printf("\nProduto encontrado no arquivo de extensao:\n");
                 printarProduto(produto);
                 *retornarProduto = produto;
@@ -532,7 +539,7 @@ void criarArquivos() {
     float preco;
     char marca[30], categoria[45], sessao[100], data_acesso[24], eventType[10];
     Produto produtoAtual;
-    produtoAtual.removido = 0;
+    produtoAtual.removido = false;
     Acesso acessoAtual;
 
     // Criar e inicializar a tabela hash
@@ -647,7 +654,7 @@ void pedirNovoProduto() {
     int id;
 
     Produto produto;
-    produto.removido = 0;
+    produto.removido = false;
     printf("Insira o ID do produto:\n");
     scanf("%d", &id);
 
@@ -687,7 +694,7 @@ void adicionarProduto(int id, const char *marca, const char *categoria, float pr
     strcpy(produto.marca, marca);
     strcpy(produto.categoria, categoria);
     produto.preco = preco;
-    produto.removido = 0;
+    produto.removido = false;
 
     FILE *extensao = fopen("produtos_extensao.dat", "ab");
     if (!extensao)
@@ -723,13 +730,15 @@ void removerProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoI
 
             if (!produto.removido) {
                 // Marcar o produto como removido
-                produto.removido = 1;
+                produto.removido = true;
 
                 // Voltar e reescrever o produto atualizado
                 fseek(arquivoProdutos, indice.offset, SEEK_SET);
                 fwrite(&produto, sizeof(Produto), 1, arquivoProdutos);
 
-                printf("Produto com ID %d foi removido com sucesso.\n", idRemover);
+                fflush(arquivoProdutos);
+
+                printf("Produto com ID %d foi removido com sucesso.\n", produto.id);
             } else {
                 printf("Produto com ID %d ja esta marcado como removido.\n", idRemover);
             }
@@ -750,7 +759,7 @@ void removerProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoI
             if (produto.id == idRemover) {
                 if (!produto.removido) {
                     // Marcar o produto como removido
-                    produto.removido = 1;
+                    produto.removido = true;
 
                     // Voltar e reescrever o produto atualizado
                     fseek(arquivoExtensao, offsetAtual, SEEK_SET);
@@ -768,15 +777,14 @@ void removerProduto(FILE *arquivoProdutos, FILE *arquivoExtensao, FILE *arquivoI
         }
     }
 
-
     printf("Produto com ID %d nao encontrado.\n", idRemover);
 }
 
 //Função para pedir ao usuário o produto a ser removido
 void pedirRemocao() {
-    FILE *arquivo = fopen("produtos.dat", "rb");
-    FILE *arquivoIndice = fopen("indice_produtos.dat", "rb");
-    FILE *arquivoExtensao = fopen("produtos_extensao.dat", "rb");
+    FILE *arquivo = fopen("produtos.dat", "ab+");
+    FILE *arquivoIndice = fopen("indice_produtos.dat", "ab+");
+    FILE *arquivoExtensao = fopen("produtos_extensao.dat", "ab+");
 
     if (!arquivo || !arquivoIndice) {
         printf("Erro ao abrir os arquivos.\n");
@@ -1077,6 +1085,10 @@ const char* categoriaMaisAcessada(TabelaHash *tabela) {
 
 //Função para encontrar a categoria mais acessada pelos usuários
 void encontrarCategoriaMaisAcessada() {
+    clock_t inicio, fim;
+    double tempo_gasto;
+
+    inicio = clock();
     FILE *arquivo = fopen("acessos.dat", "rb");
     
     TabelaHash tabela = {0};
@@ -1123,6 +1135,10 @@ void encontrarCategoriaMaisAcessada() {
             free(temp);
         }
     }
+
+    fim = clock();
+    tempo_gasto = ((double)(fim - inicio)) / CLOCKS_PER_SEC;
+    printf("A funcao demorou %f segundos para executar.\n", tempo_gasto);
 }
 
 int main() {
@@ -1201,6 +1217,7 @@ int main() {
         case 12:
             encontrarCategoriaMaisAcessada();
             break;
+
         }
 
         if (sair)
